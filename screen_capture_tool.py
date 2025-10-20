@@ -6,6 +6,7 @@ Screen Capture Tool - ENHANCED VERSION
 - Tab goes to NEXT capture
 - NEW: History appends at end (no deletion of future history)
 - Clean interface with solid black help background
+- Ctrl+Shift+4 also triggers capture mode
 """
 
 import tkinter as tk
@@ -156,31 +157,56 @@ class ScreenCaptureApp:
     def setup_keyboard_listener(self):
         def on_press(key):
             try:
+                # Handle PrtSc
                 if key == keyboard.Key.print_screen:
                     if not self.is_active:
                         self.capture_requested = True
                         if self.root and self.root.winfo_exists():
                             self.root.lift()
                             self.root.focus_force()
-                elif key == keyboard.KeyCode.from_char('c'):
+                    return
+                
+                # Handle Ctrl+C to quit
+                if hasattr(key, 'char') and key.char == 'c':
                     if hasattr(self, '_ctrl_pressed') and self._ctrl_pressed:
                         self.should_quit = True
                         if self.is_active:
                             self.deactivate_capture_mode()
+                    return
+                
+                # Handle Ctrl+Shift+4 using vk code
+                if hasattr(key, 'vk') and key.vk == 52:  # VK code for '4' key is 52 (0x34)
+                    if hasattr(self, '_ctrl_pressed') and self._ctrl_pressed and \
+                       hasattr(self, '_shift_pressed') and self._shift_pressed:
+                        if not self.is_active:
+                            self.capture_requested = True
+                            if self.root and self.root.winfo_exists():
+                                self.root.lift()
+                                self.root.focus_force()
+                    return
+                
             except AttributeError:
-                if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
-                    self._ctrl_pressed = True
+                pass
             except Exception as e:
                 pass
+            
+            # Handle modifier keys
+            if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
+                self._ctrl_pressed = True
+            elif key == keyboard.Key.shift_l or key == keyboard.Key.shift_r:
+                self._shift_pressed = True
         
         def on_release(key):
             try:
                 if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
                     self._ctrl_pressed = False
+                elif key == keyboard.Key.shift_l or key == keyboard.Key.shift_r:
+                    self._shift_pressed = False
             except AttributeError:
                 pass
         
         self._ctrl_pressed = False
+        self._shift_pressed = False
         listener = keyboard.Listener(on_press=on_press, on_release=on_release, suppress=False)
         listener.daemon = True
         listener.start()
@@ -190,7 +216,7 @@ class ScreenCaptureApp:
         self.show_info = not self.show_info
         if self.start_x is not None and self.end_x is not None:
             self.update_display()
-        return "break"  # Prevent event propagation
+        return "break"
     
     def toggle_help_display(self, event=None):
         """Toggle help text display with H key"""
@@ -198,13 +224,11 @@ class ScreenCaptureApp:
             return "break"
         
         if self.help_bg_rect:
-            # Hide help
             self.canvas.delete(self.help_bg_rect)
             self.canvas.delete(self.help_text_item)
             self.help_bg_rect = None
             self.help_text_item = None
         else:
-            # Show help
             help_content = """Screen Capture Tool - Keyboard Shortcuts
 
 Select Area: Click and drag
@@ -218,7 +242,8 @@ I: Toggle info display
 H: Toggle this help
 Enter: Save to file
 ESC: Copy to clipboard
-Ctrl+C: Quit"""
+Ctrl+C: Quit
+PrtSc or Ctrl+Shift+4: Start capture"""
             
             screen_width = self.root.winfo_screenwidth()
             screen_height = self.root.winfo_screenheight()
@@ -226,7 +251,6 @@ Ctrl+C: Quit"""
             help_x = screen_width // 2
             help_y = screen_height // 2
             
-            # Create temp text to get bbox
             bbox_padding = 20
             temp_text = self.canvas.create_text(
                 help_x, help_y,
@@ -239,7 +263,6 @@ Ctrl+C: Quit"""
             self.canvas.delete(temp_text)
             
             if bbox:
-                # Solid black background, no border
                 self.help_bg_rect = self.canvas.create_rectangle(
                     bbox[0] - bbox_padding,
                     bbox[1] - bbox_padding,
@@ -257,7 +280,7 @@ Ctrl+C: Quit"""
                     justify='left'
                 )
         
-        return "break"  # Prevent event propagation
+        return "break"
     
     def create_magnifier(self):
         if self.magnifier_window and self.magnifier_window.winfo_exists():
@@ -469,7 +492,6 @@ Ctrl+C: Quit"""
     def restore_last_capture(self):
         """Restore the position at current history index, or the last one if index is -1"""
         if self.capture_history:
-            # If index is -1, use the last item
             if self.capture_history_index == -1:
                 self.capture_history_index = len(self.capture_history) - 1
             
@@ -499,13 +521,11 @@ Ctrl+C: Quit"""
         if not self.capture_history:
             return "break"
         
-        # If we're at -1, go to the last item first
         if self.capture_history_index == -1:
             self.capture_history_index = len(self.capture_history) - 1
         elif self.capture_history_index > 0:
             self.capture_history_index -= 1
         else:
-            # At index 0, wrap to last
             self.capture_history_index = len(self.capture_history) - 1
         
         x1, y1, x2, y2 = self.capture_history[self.capture_history_index]
@@ -527,13 +547,11 @@ Ctrl+C: Quit"""
         if not self.capture_history:
             return "break"
         
-        # If we're at -1, go to the first item
         if self.capture_history_index == -1:
             self.capture_history_index = 0
         elif self.capture_history_index < len(self.capture_history) - 1:
             self.capture_history_index += 1
         else:
-            # At last index, wrap to first
             self.capture_history_index = 0
         
         x1, y1, x2, y2 = self.capture_history[self.capture_history_index]
@@ -551,7 +569,7 @@ Ctrl+C: Quit"""
         return "break"
     
     def save_current_capture_position(self):
-        """Save current position to history - always append at the end, never delete future history"""
+        """Save current position to history"""
         if self.start_x is not None and self.end_x is not None:
             x1 = min(self.start_x, self.end_x)
             y1 = min(self.start_y, self.end_y)
@@ -560,13 +578,10 @@ Ctrl+C: Quit"""
             
             new_capture = (x1, y1, x2, y2)
             
-            # Check if this exact position already exists in history
             try:
                 existing_index = self.capture_history.index(new_capture)
-                # Position exists, just update the index to point to it
                 self.capture_history_index = existing_index
             except ValueError:
-                # Position doesn't exist, append at the end (never delete future history)
                 self.capture_history.append(new_capture)
                 self.capture_history_index = len(self.capture_history) - 1
     
@@ -635,7 +650,6 @@ Ctrl+C: Quit"""
         self.canvas.bind('<ButtonRelease-1>', self.on_mouse_up)
         self.canvas.bind('<Motion>', self.on_mouse_move)
         
-        # Keyboard bindings with focus_set after each key
         self.root.bind('<Return>', self.save_screenshot)
         self.root.bind('<Escape>', self.copy_to_clipboard)
         self.root.bind('<Left>', self.on_arrow_key)
@@ -649,7 +663,6 @@ Ctrl+C: Quit"""
         self.root.bind('h', self.toggle_help_display)
         self.root.bind('H', self.toggle_help_display)
         
-        # Also bind to canvas
         self.canvas.bind('<Return>', self.save_screenshot)
         self.canvas.bind('<Escape>', self.copy_to_clipboard)
         self.canvas.bind('<Left>', self.on_arrow_key)
@@ -794,7 +807,6 @@ Ctrl+C: Quit"""
                 self.hide_magnifier()
     
     def on_mouse_down(self, event):
-        # Refocus canvas after mouse click
         self.canvas.focus_set()
         
         mode = self.get_resize_mode(event.x, event.y)
@@ -858,7 +870,6 @@ Ctrl+C: Quit"""
             self.move_selection(event.x, event.y)
     
     def on_mouse_up(self, event):
-        # Refocus canvas after mouse release
         self.canvas.focus_set()
         
         if self.is_selecting:
@@ -877,20 +888,16 @@ Ctrl+C: Quit"""
             self.region_selected = True
             self.update_display()
             self.hide_magnifier()
-            
-            # Don't save automatically on mouse up - only on ESC/Enter
         
         elif self.is_resizing:
             self.is_resizing = False
             self.resize_mode = None
             self.hide_magnifier()
-            # Don't save automatically on mouse up - only on ESC/Enter
         
         elif self.is_moving:
             self.is_moving = False
             self.move_start_x = None
             self.move_start_y = None
-            # Don't save automatically on mouse up - only on ESC/Enter
     
     def move_selection(self, x, y):
         if not self.is_moving:
@@ -976,7 +983,6 @@ Ctrl+C: Quit"""
         
         self.clear_display()
         
-        # Dark overlays
         if y1 > 0:
             rect = self.canvas.create_rectangle(
                 0, 0, screen_width, y1,
@@ -1013,7 +1019,6 @@ Ctrl+C: Quit"""
             )
             self.dark_rects.append(rect)
         
-        # Only show info if enabled
         if self.show_info:
             self.clear_corner_texts()
             
@@ -1110,7 +1115,6 @@ Ctrl+C: Quit"""
         x2 = max(self.start_x, self.end_x)
         y2 = max(self.start_y, self.end_y)
         
-        # Save position BEFORE deactivating
         self.save_current_capture_position()
         
         self.root.withdraw()
@@ -1121,7 +1125,6 @@ Ctrl+C: Quit"""
         
         screenshot = self.bg_screenshot.crop((x1, y1, x2, y2))
         
-        # Copy to clipboard
         try:
             output = io.BytesIO()
             screenshot.convert('RGB').save(output, 'BMP')
@@ -1136,7 +1139,6 @@ Ctrl+C: Quit"""
         except Exception as e:
             pass
         
-        # Save dialog
         default_filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         file_path = filedialog.asksaveasfilename(
             title="Save Screenshot",
@@ -1168,7 +1170,6 @@ Ctrl+C: Quit"""
         x2 = max(self.start_x, self.end_x)
         y2 = max(self.start_y, self.end_y)
         
-        # Save position BEFORE deactivating
         self.save_current_capture_position()
         
         self.root.withdraw()
