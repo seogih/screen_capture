@@ -1,4 +1,7 @@
 build/
+screen_capture_tool.build/
 old/
 ScreenCaptureTool.spec
 ScreenCaptureTool.lnk
+nuitka-crash-report.xml
+make_exe.txt
